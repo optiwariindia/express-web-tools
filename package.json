@@ -1,0 +1,44 @@
+{
+  "name": "express-web-tools",
+  "version": "1.0.4",
+  "description": "A lightweight framework-style library for Express applications using Mongoose. Includes reusable classes such as CrudController, CrudRouter, MongooseSchema, and JWT helpers to enforce consistent API structure and reduce boilerplate.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "express",
+    "mongoose",
+    "crud",
+    "crud-controller",
+    "crud-router",
+    "rest-api",
+    "api-framework",
+    "jwt",
+    "authentication",
+    "authorization",
+    "middleware",
+    "schema",
+    "validation",
+    "boilerplate-reduction",
+    "nodejs"
+  ],
+  "author": "Om Prakash Tiwari <optiwari.india@gmail.com>",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/mongoose": "^5.11.96",
+    "typescript": "^5.9.3"
+  }
+}
