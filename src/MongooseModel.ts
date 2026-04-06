@@ -11,25 +11,46 @@ interface Hooks {
     virtuals?: HookActions;
 }
 
+export interface ModelConfig {
+    softDelete?: boolean;
+    multitenant?: boolean;
+    auditEnforce?: boolean;
+    timestamps?: boolean;
+}
+
 export default class MongooseModel<T extends Document> {
     #modelName: string;
     #schema: Schema;
-    #index: any[]; // mongoose.IndexDefinition[] | null;
+    #index: any[];
     #hooks: Hooks | null;
+    #userSchema: string = "User";
+    #config: ModelConfig;
+
+    get modelName() { return this.#modelName }
+    get userSchema() { return this.#userSchema; }
+    set userSchema(value: string) { this.#userSchema = value; }
 
     constructor(
         modelName: string,
         schema: Schema,
-        index: any[] | null = null, // mongoose.IndexDefinition[] | null = null,
-        hooks: Hooks | null = null
+        index: any[] | null = null,
+        hooks: Hooks | null = null,
+        config: ModelConfig = {}
     ) {
         this.#modelName = modelName;
         this.#schema = schema;
         this.#index = index || [];
         this.#hooks = hooks;
+        this.#config = {
+            softDelete: true,
+            multitenant: true,
+            auditEnforce: true,
+            timestamps: true,
+            ...config
+        };
     }
 
-    addIndex(newIndex: any) { // newIndex: mongoose.IndexDefinition
+    addIndex(newIndex: any) {
         if (!this.#index) {
             this.#index = [];
         }
@@ -60,6 +81,68 @@ export default class MongooseModel<T extends Document> {
         this.#hooks.virtuals = { ...this.#hooks.virtuals, [name]: action };
     }
 
+    baseSchema() {
+        const schemaDef: any = {
+            sortOrder: {
+                type: Number,
+                default: 0,
+                select: true
+            },
+            isActive: {
+                type: Boolean,
+                default: true,
+                select: false
+            }
+        };
+
+        if (this.#config.multitenant) {
+            schemaDef.origin = {
+                type: String,
+                required: true,
+            };
+        }
+
+        if (this.#config.softDelete) {
+            schemaDef.isDeleted = {
+                type: Boolean,
+                default: false,
+                select: false
+            };
+            schemaDef.deleted = {
+                At: {
+                    type: Date
+                },
+                By: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: this.#userSchema,
+                }
+            };
+        }
+
+        if (this.#config.auditEnforce) {
+            schemaDef.created = {
+                By: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: this.#userSchema,
+                },
+                From: {
+                    type: String,
+                },
+            };
+            schemaDef.updated = {
+                By: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: this.#userSchema,
+                },
+                From: {
+                    type: String
+                }
+            };
+        }
+
+        return schemaDef;
+    }
+
     model(): Model<T> {
         const modelName = this.#modelName;
         const schema = this.#schema;
@@ -68,56 +151,11 @@ export default class MongooseModel<T extends Document> {
 
         const schemaObject = new mongoose.Schema<T>(
             {
-                ...schema.obj, // Use .obj to get the schema definition
-                origin: {
-                    type: String,
-                    required: true,
-                },
-                sortOrder: {
-                    type: Number,
-                    default: 0,
-                    select: true
-                },
-                isActive: {
-                    type: Boolean,
-                    default: true,
-                    select: false
-                },
-                isDeleted: {
-                    type: Boolean,
-                    default: false,
-                    select: false
-                },
-                deleted: {
-                    At: {
-                        type: Date
-                    },
-                    By: {
-                        type: mongoose.Schema.Types.ObjectId,
-                        ref: "User"
-                    }
-                },
-                created: {
-                    By: {
-                        type: mongoose.Schema.Types.ObjectId,
-                        ref: "User",
-                    },
-                    From: {
-                        type: String,
-                    },
-                },
-                updated: {
-                    By: {
-                        type: mongoose.Schema.Types.ObjectId,
-                        ref: "User",
-                    },
-                    From: {
-                        type: String
-                    }
-                }
+                ...schema.obj,
+                ...this.baseSchema()
             },
             {
-                timestamps: true,
+                timestamps: this.#config.timestamps,
                 versionKey: false,
                 collection: modelName,
                 toObject: {
@@ -129,30 +167,36 @@ export default class MongooseModel<T extends Document> {
             }
         );
 
+        // Attached config to the model for reference in Controllers
+        (schemaObject as any)._config = this.#config;
+
         if (index && index.length > 0) {
             index.forEach((item) => {
-                schemaObject.index(item); // Corrected: passing item directly
+                schemaObject.index(item);
             });
         }
-        schemaObject.index({ sortOrder: 1, isActive: 1, isDeleted: 1 });
+
+        const baseIndex: any = { sortOrder: 1, isActive: 1 };
+        if (this.#config.softDelete) baseIndex.isDeleted = 1;
+        schemaObject.index(baseIndex);
 
         if (hooks && hooks.pre) {
             Object.keys(hooks.pre).forEach((hook) => {
-                if (hooks.pre) { // Additional check
+                if (hooks.pre) {
                     schemaObject.pre(hook as any, hooks.pre[hook] as any);
                 }
             });
         }
         if (hooks && hooks.post) {
             Object.keys(hooks.post).forEach((hook) => {
-                if (hooks.post) { // Additional check
+                if (hooks.post) {
                     schemaObject.post(hook as any, hooks.post[hook] as any);
                 }
             });
         }
         if (hooks && hooks.method) {
             Object.keys(hooks.method).forEach((hook) => {
-                if (hooks.method) { // Additional check
+                if (hooks.method) {
                     schemaObject.methods[hook] = hooks.method[hook];
                 }
             });

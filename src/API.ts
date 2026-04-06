@@ -15,7 +15,7 @@ class API {
             this.defaultHeaders = headers;
             this.client = useHttps ? https : http;
         } catch (error) {
-            console.log({ error });
+            throw error;
         }
     }
 

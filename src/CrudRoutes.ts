@@ -1,17 +1,40 @@
 import { asyncHandler } from "./asyncHandler.js";
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, RequestHandler } from "express";
 import CrudController from "./CrudController.js";
 import { Document } from "mongoose";
+
+export interface CrudMiddleware {
+    global?: RequestHandler[];
+    listAll?: RequestHandler[];
+    list?: RequestHandler[];
+    add?: RequestHandler[];
+    read?: RequestHandler[];
+    update?: RequestHandler[];
+    delete?: RequestHandler[];
+}
 
 export default class CrudRoutes<T extends Document> {
     #router: Router;
     #endpoint: string;
     #controller: CrudController<T>;
+    #middleware: CrudMiddleware;
 
-    constructor(endpoint: string, controller: CrudController<T>) {
+    constructor(endpoint: string, controller: CrudController<T>, middleware: CrudMiddleware = {}) {
         this.#router = Router();
         this.#endpoint = endpoint;
         this.#controller = controller;
+        this.#middleware = middleware;
+    }
+
+    addMiddleware(type: keyof CrudMiddleware, middleware: RequestHandler | RequestHandler[]) {
+        if (!this.#middleware[type]) {
+            this.#middleware[type] = [];
+        }
+        if (Array.isArray(middleware)) {
+            this.#middleware[type]!.push(...middleware);
+        } else {
+            this.#middleware[type]!.push(middleware);
+        }
     }
 
     setRequest(req: Request) {
@@ -63,28 +86,45 @@ export default class CrudRoutes<T extends Document> {
     }
 
     publish(): Router {
+        const m = this.#middleware;
+        const g = m.global || [];
+
         this.#router
             .route(this.#endpoint)
             .get(
+                ...g,
+                ...(m.listAll || []),
                 asyncHandler(this.listAll.bind(this))
             )
             .post(
+                ...g,
+                ...(m.list || []),
                 asyncHandler(this.list.bind(this))
             )
             .put(
+                ...g,
+                ...(m.add || []),
                 asyncHandler(this.add.bind(this))
             );
+
         this.#router
             .route(`${this.#endpoint}/:id`)
             .get(
+                ...g,
+                ...(m.read || []),
                 asyncHandler(this.read.bind(this))
             )
             .put(
+                ...g,
+                ...(m.update || []),
                 asyncHandler(this.update.bind(this))
             )
             .delete(
+                ...g,
+                ...(m.delete || []),
                 asyncHandler(this.delete.bind(this))
             );
+
         return this.#router;
     }
 }

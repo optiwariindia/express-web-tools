@@ -1,5 +1,5 @@
 import express, { Express, Router, Request, Response, NextFunction } from "express";
-import fsLogger from "./fsLogger.js";
+import FSLogger from "./fsLogger.js";
 
 export default class ExpressServer {
     #app: Express;
@@ -32,7 +32,7 @@ export default class ExpressServer {
 
     start(port: number) {
         this.#app.listen(port, () => {
-            fsLogger.Log(`Server started on port ${port}`);
+            FSLogger.Log(`Server started on port ${port}`);
         });
     }
 }

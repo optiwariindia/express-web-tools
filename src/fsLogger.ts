@@ -26,7 +26,7 @@ function weeks(n: number): number {
     return days(7) * n;
 }
 
-class fsLogger {
+class FSLogger {
     #path: string;
     #timezone: string;
     #locale: string;
@@ -47,9 +47,6 @@ class fsLogger {
         this.#locale = locale;
         this.#timezone = timezone;
         this.createFile(path);
-        setInterval(async () => {
-            await this.createFile(path);
-        }, weeks(1));
     }
 
     set Locale(locale: string) {
@@ -97,8 +94,13 @@ class fsLogger {
         this.#write(output);
     }
 }
-const logpath=process.env.logpath ?? `${process.env.PWD}/logs`
-export default new fsLogger(logpath, {
+
+const logpath = process.env.logpath ?? `${process.cwd()}/logs`
+const fsLogger = new FSLogger(logpath, {
     locale: "en-IN",
     timezone: "IST"
 });
+export default fsLogger;
+export {
+    FSLogger
+}

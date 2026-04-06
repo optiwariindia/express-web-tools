@@ -1,5 +1,6 @@
 import { Model, Document, PopulateOptions } from 'mongoose';
 import { Request } from 'express';
+import { ModelConfig } from './MongooseModel.js';
 
 interface CustomRequest extends Request {
     user?: any;
@@ -15,12 +16,48 @@ export default class CrudController<T extends Document> {
         this.#model = model;
     }
 
-    get commonFilters() {
-        return {
-            isActive: true,
-            isDeleted: false,
-            origin: this.request.origin
+    get config(): ModelConfig {
+        return (this.#model.schema as any)._config || {
+            softDelete: true,
+            multitenant: true,
+            auditEnforce: true,
+            timestamps: true
+        };
+    }
+
+    /**
+     * Validates that the request has an origin if multitenant is enabled.
+     */
+    protected validateRequest(): void {
+        if (this.config.multitenant && !this.request?.origin) {
+            throw new Error("[CrudController Error]: Request 'origin' is missing and is required for this operation.");
         }
+    }
+
+    /**
+     * Validates that the request has user information if auditEnforce is enabled.
+     */
+    protected validateUser(): void {
+        if (this.config.auditEnforce && !this.request?.user?._id) {
+            throw new Error("[CrudController Error]: User identification ('user._id') is missing and is required for this operation.");
+        }
+    }
+
+    get commonFilters() {
+        const filters: any = {
+            isActive: true
+        };
+
+        if (this.config.softDelete) {
+            filters.isDeleted = false;
+        }
+
+        if (this.config.multitenant) {
+            this.validateRequest();
+            filters.origin = this.request.origin;
+        }
+
+        return filters;
     }
 
     set request(req: CustomRequest) {
@@ -40,92 +77,208 @@ export default class CrudController<T extends Document> {
     }
 
     async upsert(match: any, upsert: any) {
-        let temp = await this.#model.findOne(match);
+        const query = { ...match };
+        if (this.config.multitenant) {
+            this.validateRequest();
+            query.origin = this.request.origin;
+        }
+
+        let temp = await this.#model.findOne(query);
         if (!temp) return await this.create(upsert);
         return await this.update((temp as any)._id, upsert);
     }
 
     async create(data: any): Promise<T> {
+        this.validateRequest();
+        this.validateUser();
         try {
-            let temp = {
-                created: {
+            let temp = { ...data };
+
+            if (this.config.auditEnforce) {
+                temp.created = {
                     By: this.request.user._id,
-                    From: this.request.clientIP
-                },
-                ...data,
-                origin: this.request.origin,
-            };
+                    From: this.request.clientIP || 'unknown'
+                };
+            }
+
+            if (this.config.multitenant) {
+                temp.origin = this.request.origin;
+            }
+
             const newItem = await this.#model.create(temp);
             return newItem;
         } catch (error: any) {
-            throw new Error('Error creating item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async read(id: string, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
+        const query: any = { _id: id };
+        if (this.config.multitenant) {
+            this.validateRequest();
+            query.origin = this.request.origin;
+        }
+
         try {
             let item;
             if (!populateFields)
-                item = await this.#model.findById(id);
+                item = await this.#model.findOne(query);
             else
-                item = await this.#model.findById(id).populate(populateFields);
+                item = await this.#model.findOne(query).populate(populateFields);
+            
             if (!item) {
                 throw new Error('Item not found');
             }
             return item;
         } catch (error: any) {
-            throw new Error('Error reading item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async update(id: string, data: any): Promise<T | null> {
+        this.validateRequest();
+        this.validateUser();
+
+        const query: any = { _id: id };
+        if (this.config.multitenant) {
+            query.origin = this.request.origin;
+        }
+
         try {
-            const updatedItem = await this.#model.findByIdAndUpdate(id, { ...data, updated: { By: this.request.user._id, From: this.request.clientIP } }, { new: true });
+            const updatePayload: any = { ...data };
+            if (this.config.auditEnforce) {
+                updatePayload.updated = { 
+                    By: this.request.user._id, 
+                    From: this.request.clientIP || 'unknown' 
+                };
+            }
+
+            const updatedItem = await this.#model.findOneAndUpdate(
+                query,
+                updatePayload,
+                { new: true }
+            );
             if (!updatedItem) {
                 throw new Error('Item not found');
             }
             return updatedItem;
         } catch (error: any) {
-            throw new Error('Error updating item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async activate(id: string): Promise<T | null> {
-        const activatedItem = await this.#model.findByIdAndUpdate(id, { isActive: true, updated: { By: this.request.user._id, From: this.request.clientIP } });
-        if (!activatedItem) {
-            throw new Error('Item not found');
+        this.validateRequest();
+        this.validateUser();
+
+        const query: any = { _id: id };
+        if (this.config.multitenant) {
+            query.origin = this.request.origin;
         }
-        return activatedItem;
+
+        try {
+            const updatePayload: any = { isActive: true };
+            if (this.config.auditEnforce) {
+                updatePayload.updated = { 
+                    By: this.request.user._id, 
+                    From: this.request.clientIP || 'unknown' 
+                };
+            }
+
+            const activatedItem = await this.#model.findOneAndUpdate(
+                query,
+                updatePayload,
+                { new: true }
+            );
+            if (!activatedItem) {
+                throw new Error('Item not found');
+            }
+            return activatedItem;
+        } catch (error: any) {
+            throw new Error(`[CrudController Error]: ${error.message}`);
+        }
     }
 
     async deactivate(id: string): Promise<T | null> {
-        const deactivatedItem = await this.#model.findByIdAndUpdate(id, { isActive: false, updated: { By: this.request.user._id, From: this.request.clientIP } });
-        if (!deactivatedItem) {
-            throw new Error('Item not found');
+        this.validateRequest();
+        this.validateUser();
+
+        const query: any = { _id: id };
+        if (this.config.multitenant) {
+            query.origin = this.request.origin;
         }
-        return deactivatedItem;
+
+        try {
+            const updatePayload: any = { isActive: false };
+            if (this.config.auditEnforce) {
+                updatePayload.updated = { 
+                    By: this.request.user._id, 
+                    From: this.request.clientIP || 'unknown' 
+                };
+            }
+
+            const deactivatedItem = await this.#model.findOneAndUpdate(
+                query,
+                updatePayload,
+                { new: true }
+            );
+            if (!deactivatedItem) {
+                throw new Error('Item not found');
+            }
+            return deactivatedItem;
+        } catch (error: any) {
+            throw new Error(`[CrudController Error]: ${error.message}`);
+        }
     }
 
     async delete(id: string): Promise<T | null> {
+        this.validateRequest();
+        this.validateUser();
+
+        const query: any = { _id: id };
+        if (this.config.multitenant) {
+            query.origin = this.request.origin;
+        }
+
         try {
-            const deletedItem = await this.#model.findByIdAndUpdate(id, { isDeleted: true, deleted: { At: new Date(), By: this.request.user._id } });
+            const updatePayload: any = {};
+            if (this.config.softDelete) {
+                updatePayload.isDeleted = true;
+                updatePayload.deleted = { At: new Date(), By: this.request?.user?._id };
+            }
+
+            const deletedItem = await this.#model.findOneAndUpdate(
+                query,
+                this.config.softDelete ? updatePayload : { $set: { isDeleted: true } }, // fallback if softDelete logic differs
+                { new: true }
+            );
+
+            // If softDelete is disabled in config, but we called delete, 
+            // the user might expect a hard delete or it might fail if field doesn't exist.
+            // For now, we respect the softDelete flag.
+            if (!this.config.softDelete) {
+                 return await this.#model.findOneAndDelete(query);
+            }
+
             if (!deletedItem) {
                 throw new Error('Item not found');
             }
             return deletedItem;
         } catch (error: any) {
-            throw new Error('Error deleting item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async list(query: any = {}, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null, sort: any = {}, project: any = null): Promise<T[]> {
         try {
-            let sortOrder = { isActive: -1, sortOrder: -1, ...sort, createdAt: -1, };
+            let sortOrder = { isActive: -1, sortOrder: -1, ...sort } as any;
+            if (this.config.timestamps) {
+                sortOrder.createdAt = -1;
+            }
+
             let temp = this.#model.find({
-                isActive: true,
-                isDeleted: false,
-                ...query,
-                origin: this.request.origin
+                ...this.commonFilters,
+                ...query
             });
             temp = temp.sort(sortOrder);
             if (populateFields) temp = temp.populate(populateFields);
@@ -133,38 +286,40 @@ export default class CrudController<T extends Document> {
 
             return await temp.exec();
         } catch (error: any) {
-            throw new Error('Error listing items: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async count(query: any = {}): Promise<number> {
         try {
-            const count = await this.#model.countDocuments({ isActive: true, isDeleted: false, ...query, origin: this.request.origin });
+            const count = await this.#model.countDocuments({ ...this.commonFilters, ...query });
             return count;
         } catch (error: any) {
-            throw new Error('Error counting items: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async findOne(query: any, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
         try {
             if (!populateFields)
-                return await this.#model.findOne({ isActive: true, isDeleted: false, ...query, origin: this.request.origin });
-            return await this.#model.findOne({ isActive: true, isDeleted: false, ...query, origin: this.request.origin }).populate(populateFields);
+                return await this.#model.findOne({ ...this.commonFilters, ...query });
+            return await this.#model.findOne({ ...this.commonFilters, ...query }).populate(populateFields);
         } catch (error: any) {
-            throw new Error('Error finding item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 
     async cleanup() {
+        const query: any = {};
+        if (this.config.multitenant) {
+            this.validateRequest();
+            query.origin = this.request.origin;
+        }
+
         try {
-            const deletedItem = await this.#model.deleteMany({});
-            if (!deletedItem) {
-                throw new Error('Item not found');
-            }
-            return deletedItem;
+            return await this.#model.deleteMany(query);
         } catch (error: any) {
-            throw new Error('Error deleting item: ' + error.message);
+            throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
 }

@@ -1,193 +1,149 @@
 # express-web-tools
 
-A lightweight framework-style library for Express applications using Mongoose. Includes reusable classes such as CrudController, CrudRouter, MongooseSchema, and JWT helpers to enforce consistent API structure and reduce boilerplate.
+A lightweight framework-style library for Express applications using Mongoose. It provides reusable classes and utilities to enforce a consistent API structure, automate CRUD operations, and significantly reduce boilerplate code.
+
+## Key Features
+
+- **Configurable Mongoose Models**: Automatically add audit fields, soft-delete logic, and multitenancy support.
+- **Automated CRUD**: Generate routes and controllers with built-in validation and metadata tracking.
+- **Modern Performance**: Uses `structuredClone` for deep object mutation.
+- **Flexible Logging**: File-system logger with support for multiple instances and custom paths.
+- **Event Management**: Application-wide or private async event streams.
+- **JWT Helpers**: Simple, configurable token generation and verification.
+
+---
+
+## Usage
+
+### 1. `MongooseModel` & Configuration
+
+Define your schemas with automatic audit and multitenancy support.
+
+```typescript
+import { MongooseModel } from 'express-web-tools';
+import { Schema, Document } from 'mongoose';
+
+interface IUser extends Document {
+    username: string;
+}
+
+const userSchema = new Schema({ username: String });
+
+// Configuration options (All default to true)
+const config = {
+    softDelete: true,    // Adds isDeleted flag and deleted metadata
+    multitenant: true,   // Adds origin field for data isolation
+    auditEnforce: true,  // Adds created/updated (By/From) metadata
+    timestamps: true     // Enables native Mongoose timestamps
+};
+
+const userModelWrapper = new MongooseModel<IUser>('User', userSchema, null, null, config);
+const User = userModelWrapper.model();
+```
+
+### 2. `CrudController`
+
+The controller automatically adapts its logic based on the `MongooseModel` configuration.
+
+```typescript
+import { CrudController } from 'express-web-tools';
+import { User } from './models/User';
+
+class UserController extends CrudController<IUser> {
+    constructor() {
+        super(User);
+    }
+    // Logic for 'origin' and 'user._id' validation is handled automatically
+}
+```
+
+### 3. `CrudRoutes`
+
+Generate standard RESTful endpoints for your controller with optional global and local middlewares.
+
+```typescript
+import { CrudRoutes, CrudMiddleware } from 'express-web-tools';
+import userController from './controllers/UserController';
+import { authenticate, authorize, validateUser } from './middleware';
+
+const middleware: CrudMiddleware = {
+    global: [authenticate],     // Applied to all routes
+    add: [validateUser],         // Specific to POST /users
+    delete: [authorize('admin')] // Specific to DELETE /users/:id
+};
+
+const userRoutes = new CrudRoutes('/users', userController, middleware);
+
+// Dynamic middleware addition
+userRoutes.addMiddleware('global', [anotherMiddleware]);
+userRoutes.addMiddleware('add', validatePayload);
+
+const router = userRoutes.publish();
+
+// Routes generated:
+// GET    /users     -> [authenticate] -> List all
+// POST   /users     -> [authenticate, validateUser] -> Create new
+// DELETE /users/:id -> [authenticate, authorize('admin')] -> Delete
+```
+
+### 4. `EventStream`
+
+Singleton or instance-based event emitter with async support.
+
+```typescript
+import { eventStream, EventStream } from 'express-web-tools';
+
+// Using the global singleton
+eventStream.onEvent('log', async (data) => console.log(data));
+eventStream.emitEvent('log', 'Hello World');
+
+// Or create a private stream
+const privateBus = new EventStream();
+```
+
+### 5. `FSLogger`
+
+Manage application logs with ease.
+
+```typescript
+import { fsLogger, FSLogger } from 'express-web-tools';
+
+// Global logger (uses process.env.logpath or ./logs)
+fsLogger.Log('Action performed', { userId: 1 });
+
+// Custom logger
+const dbLogger = new FSLogger('./logs/db.log');
+```
+
+### 6. `Token` (JWT)
+
+Configure your secret once and use it everywhere.
+
+```typescript
+import { Token } from 'express-web-tools';
+
+Token.config('your-super-secret-key');
+
+const token = Token.generate({ id: '123' });
+const payload = Token.verify(token);
+```
+
+---
+
+## API Reference Summary
+
+- **`API`**: HTTP/HTTPS client and static response helpers (`API.json`, `API.html`).
+- **`ExpressServer`**: Wrapper to simplify Express app setup, middleware, and routing.
+- **`Mutate`**: High-performance deep cloning using `structuredClone`.
+- **`HttpError`**: Standardized error class for throwing HTTP-specific status codes.
+- **`asyncHandler`**: Middleware to wrap async routes and catch errors automatically.
 
 ## Installation
-
-To install `express-web-tools`, use npm:
 
 ```bash
 npm install express-web-tools
 ```
 
-## Usage
-
-### `CrudController`
-
-A base controller for CRUD operations on Mongoose models.
-
-```typescript
-import { CrudController } from 'express-web-tools';
-import { Model, Document } from 'mongoose';
-
-interface MyDocument extends Document {
-    name: string;
-    // ... other properties
-}
-
-class MyController extends CrudController<MyDocument> {
-    constructor(model: Model<MyDocument>) {
-        super(model);
-    }
-    // You can override or add custom methods here
-}
-
-// Example:
-// const myController = new MyController(MyModel);
-// const newItem = await myController.create({ name: "Test Item" });
-```
-
-### `CrudRoutes`
-
-Generates Express routes for CRUD operations using a `CrudController`.
-
-```typescript
-import { CrudRoutes, CrudController } from 'express-web-tools';
-import { Router } from 'express';
-import { Model, Document } from 'mongoose';
-
-interface MyDocument extends Document {
-    name: string;
-    // ... other properties
-}
-
-// Assume MyModel is a Mongoose Model and myController is an instance of CrudController<MyDocument>
-// const myCrudRoutes = new CrudRoutes<MyDocument>('/api/my-resource', myController);
-// const router: Router = myCrudRoutes.publish();
-// app.use('/', router);
-```
-
-### `ExpressServer`
-
-A utility class to set up and manage an Express server.
-
-```typescript
-import { ExpressServer } from 'express-web-tools';
-import express from 'express';
-
-const app = new ExpressServer();
-
-// Add middleware
-app.addMiddleware(express.json());
-
-// Set up views (optional)
-app.views('pug', './views');
-
-// Add routes
-// app.addRoute('/api', myCrudRouter);
-
-// Start the server
-// app.start(3000);
-```
-
-### `fsLogger`
-
-A file system-based logger with archiving capabilities.
-
-```typescript
-import { fsLogger } from 'express-web-tools';
-
-fsLogger.Log('This is a log message.');
-fsLogger.Log('User logged in', { userId: '123', ip: '192.168.1.1' });
-
-// To archive logs (e.g., weekly, as configured internally)
-// await fsLogger.Archive();
-```
-
-### `Token`
-
-Utility for generating and verifying JWT tokens.
-
-```typescript
-import { Token } from 'express-web-tools';
-
-const userPayload = { id: 'user123', role: 'admin' };
-const jwtToken = Token.generate(userPayload, '1h'); // Token expires in 1 hour
-
-try {
-    const decoded = Token.verify(jwtToken);
-    console.log('Decoded token:', decoded);
-} catch (error) {
-    console.error('Token verification failed:', error.message);
-}
-```
-
-### `Mutate`
-
-Deep clones an object using JSON serialization.
-
-```typescript
-import { Mutate } from 'express-web-tools';
-
-const originalObject = { a: 1, b: { c: 2 } };
-const clonedObject = Mutate(originalObject);
-
-clonedObject.b.c = 3;
-console.log('Original:', originalObject); // { a: 1, b: { c: 2 } }
-console.log('Cloned:', clonedObject);     // { a: 1, b: { c: 3 } }
-```
-
-### `HttpError`
-
-A custom HTTP error class.
-
-```typescript
-import { HttpError } from 'express-web-tools';
-
-try {
-    throw new HttpError('Resource not found', 404);
-} catch (error) {
-    if (error instanceof HttpError) {
-        console.error(`HTTP Error: ${error.message}, Code: ${error.code}`);
-    } else {
-        console.error('An unexpected error occurred:', error);
-    }
-}
-```
-
-### `MongooseModel`
-
-A wrapper for Mongoose schemas and models, adding common fields and hooks.
-
-```typescript
-import { MongooseModel } from 'express-web-tools';
-import mongoose, { Schema, Document } from 'mongoose';
-
-interface UserDocument extends Document {
-    username: string;
-    email: string;
-}
-
-const userSchema = new Schema({
-    username: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-});
-
-const userMongooseModel = new MongooseModel<UserDocument>(
-    'User',
-    userSchema
-);
-
-const User = userMongooseModel.model(); // This is your Mongoose Model
-```
-
-## API Reference
-
-The library exposes the following main components:
-
-*   **`fsLogger`**: A singleton instance for file system logging.
-*   **`CrudController<T extends Document>`**: Generic class for Mongoose CRUD operations.
-*   **`CrudRoutes<T extends Document>`**: Generic class to generate Express routes for CRUD.
-*   **`MongooseModel<T extends Document>`**: Generic class to define Mongoose models with extended features.
-*   **`ExpressServer`**: Class to set up and manage an Express application.
-*   **`HttpError`**: Custom error class for HTTP-specific errors.
-*   **`Token`**: Object containing `generate` and `verify` functions for JWT.
-*   **`Mutate`**: Function for deep cloning objects.
-
-## Keywords
-
-express, mongoose, crud, crud-controller, crud-router, rest-api, api-framework, jwt, authentication, authorization, middleware, schema, validation, boilerplate-reduction, nodejs
-
 ## License
 
-This project is licensed under the ISC License.
+ISC
