@@ -125,7 +125,7 @@ export default class CrudController<T extends Document> {
                 item = await this.#model.findOne(query);
             else
                 item = await this.#model.findOne(query).populate(populateFields);
-            
+
             if (!item) {
                 throw new Error('Item not found');
             }
@@ -147,9 +147,9 @@ export default class CrudController<T extends Document> {
         try {
             const updatePayload: any = { ...data };
             if (this.config.auditEnforce) {
-                updatePayload.updated = { 
-                    By: this.request.user._id, 
-                    From: this.request.clientIP || 'unknown' 
+                updatePayload.updated = {
+                    By: this.request.user._id,
+                    From: this.request.clientIP || 'unknown'
                 };
             }
 
@@ -179,9 +179,9 @@ export default class CrudController<T extends Document> {
         try {
             const updatePayload: any = { isActive: true };
             if (this.config.auditEnforce) {
-                updatePayload.updated = { 
-                    By: this.request.user._id, 
-                    From: this.request.clientIP || 'unknown' 
+                updatePayload.updated = {
+                    By: this.request.user._id,
+                    From: this.request.clientIP || 'unknown'
                 };
             }
 
@@ -211,9 +211,9 @@ export default class CrudController<T extends Document> {
         try {
             const updatePayload: any = { isActive: false };
             if (this.config.auditEnforce) {
-                updatePayload.updated = { 
-                    By: this.request.user._id, 
-                    From: this.request.clientIP || 'unknown' 
+                updatePayload.updated = {
+                    By: this.request.user._id,
+                    From: this.request.clientIP || 'unknown'
                 };
             }
 
@@ -257,7 +257,7 @@ export default class CrudController<T extends Document> {
             // the user might expect a hard delete or it might fail if field doesn't exist.
             // For now, we respect the softDelete flag.
             if (!this.config.softDelete) {
-                 return await this.#model.findOneAndDelete(query);
+                return await this.#model.findOneAndDelete(query);
             }
 
             if (!deletedItem) {
@@ -282,9 +282,10 @@ export default class CrudController<T extends Document> {
             });
             temp = temp.sort(sortOrder);
             if (populateFields) temp = temp.populate(populateFields);
-            if (!!project) temp = temp.select(project);
+            // if (project) temp = temp.select(project);
+            return await temp.select(project as any).lean().exec() as T[];
 
-            return await temp.exec();
+            return await temp.exec() as T[];
         } catch (error: any) {
             throw new Error(`[CrudController Error]: ${error.message}`);
         }

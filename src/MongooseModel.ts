@@ -1,14 +1,15 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
-interface HookActions {
-    [key: string]: Function;
-}
+type AnyFn = (...args: any[]) => any;
 
-interface Hooks {
-    pre?: HookActions;
-    post?: HookActions;
-    method?: HookActions;
-    virtuals?: HookActions;
+type StaticMethod<T extends Document> = (this: Model<T>, ...args: any[]) => any;
+
+interface Hooks<T extends Document> {
+    pre?: Record<string, AnyFn>;
+    post?: Record<string, AnyFn>;
+    method?: Record<string, AnyFn>;
+    virtuals?: Record<string, AnyFn>;
+    statics?: Record<string, StaticMethod<T>>;
 }
 
 export interface ModelConfig {
@@ -22,25 +23,22 @@ export default class MongooseModel<T extends Document> {
     #modelName: string;
     #schema: Schema;
     #index: any[];
-    #hooks: Hooks | null;
+    #hooks: Hooks<T> | null;
     #userSchema: string = "User";
     #config: ModelConfig;
-
-    get modelName() { return this.#modelName }
-    get userSchema() { return this.#userSchema; }
-    set userSchema(value: string) { this.#userSchema = value; }
 
     constructor(
         modelName: string,
         schema: Schema,
         index: any[] | null = null,
-        hooks: Hooks | null = null,
+        hooks: Hooks<T> | null = null,
         config: ModelConfig = {}
     ) {
         this.#modelName = modelName;
         this.#schema = schema;
         this.#index = index || [];
         this.#hooks = hooks;
+
         this.#config = {
             softDelete: true,
             multitenant: true,
@@ -50,168 +48,115 @@ export default class MongooseModel<T extends Document> {
         };
     }
 
+    // ---------------- Hooks Adders ----------------
+
+    addPreHook(name: string, fn: AnyFn) {
+        this.#hooks ??= {};
+        this.#hooks.pre ??= {};
+        this.#hooks.pre[name] = fn;
+    }
+
+    addPostHook(name: string, fn: AnyFn) {
+        this.#hooks ??= {};
+        this.#hooks.post ??= {};
+        this.#hooks.post[name] = fn;
+    }
+
+    addMethod(name: string, fn: AnyFn) {
+        this.#hooks ??= {};
+        this.#hooks.method ??= {};
+        this.#hooks.method[name] = fn;
+    }
+
+    addVirtual(name: string, fn: AnyFn) {
+        this.#hooks ??= {};
+        this.#hooks.virtuals ??= {};
+        this.#hooks.virtuals[name] = fn;
+    }
+
+    addStatic(name: string, fn: StaticMethod<T>) {
+        this.#hooks ??= {};
+        this.#hooks.statics ??= {};
+        this.#hooks.statics[name] = fn;
+    }
+
     addIndex(newIndex: any) {
-        if (!this.#index) {
-            this.#index = [];
-        }
         this.#index.push(newIndex);
     }
 
-    addPreHook(name: string, action: Function) {
-        if (!this.#hooks) this.#hooks = {};
-        if (!("pre" in this.#hooks)) this.#hooks = { ...this.#hooks, pre: {} };
-        this.#hooks.pre = { ...this.#hooks.pre, [name]: action };
-    }
-
-    addPostHook(name: string, action: Function) {
-        if (!this.#hooks) this.#hooks = {};
-        if (!("post" in this.#hooks)) this.#hooks = { ...this.#hooks, post: {} };
-        this.#hooks.post = { ...this.#hooks.post, [name]: action };
-    }
-
-    addMethod(name: string, action: Function) {
-        if (!this.#hooks) this.#hooks = {};
-        if (!("method" in this.#hooks)) this.#hooks = { ...this.#hooks, method: {} };
-        this.#hooks.method = { ...this.#hooks.method, [name]: action };
-    }
-
-    addVirtuals(name: string, action: Function) {
-        if (!this.#hooks) this.#hooks = {};
-        if (!("virtuals" in this.#hooks)) this.#hooks = { ...this.#hooks, virtuals: {} };
-        this.#hooks.virtuals = { ...this.#hooks.virtuals, [name]: action };
-    }
+    // ---------------- Base Schema ----------------
 
     baseSchema() {
         const schemaDef: any = {
-            sortOrder: {
-                type: Number,
-                default: 0,
-                select: true
-            },
-            isActive: {
-                type: Boolean,
-                default: true,
-                select: false
-            }
+            sortOrder: { type: Number, default: 0 },
+            isActive: { type: Boolean, default: true, select: false }
         };
 
         if (this.#config.multitenant) {
-            schemaDef.origin = {
-                type: String,
-                required: true,
-            };
+            schemaDef.origin = { type: String, required: true };
         }
 
         if (this.#config.softDelete) {
-            schemaDef.isDeleted = {
-                type: Boolean,
-                default: false,
-                select: false
-            };
-            schemaDef.deleted = {
-                At: {
-                    type: Date
-                },
-                By: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: this.#userSchema,
-                }
-            };
-        }
-
-        if (this.#config.auditEnforce) {
-            schemaDef.created = {
-                By: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: this.#userSchema,
-                },
-                From: {
-                    type: String,
-                },
-            };
-            schemaDef.updated = {
-                By: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: this.#userSchema,
-                },
-                From: {
-                    type: String
-                }
-            };
+            schemaDef.isDeleted = { type: Boolean, default: false, select: false };
         }
 
         return schemaDef;
     }
 
-    model(): Model<T> {
-        const modelName = this.#modelName;
-        const schema = this.#schema;
-        const index = this.#index;
-        const hooks = this.#hooks;
+    // ---------------- Build Model ----------------
 
+    model(): Model<T> {
         const schemaObject = new mongoose.Schema<T>(
             {
-                ...schema.obj,
+                ...this.#schema.obj,
                 ...this.baseSchema()
             },
             {
                 timestamps: this.#config.timestamps,
                 versionKey: false,
-                collection: modelName,
-                toObject: {
-                    virtuals: true,
-                },
-                toJSON: {
-                    virtuals: true,
-                },
+                collection: this.#modelName,
+                toJSON: { virtuals: true },
+                toObject: { virtuals: true }
             }
         );
 
-        // Attached config to the model for reference in Controllers
-        (schemaObject as any)._config = this.#config;
+        // indexes
+        this.#index.forEach(i => schemaObject.index(i));
 
-        if (index && index.length > 0) {
-            index.forEach((item) => {
-                schemaObject.index(item);
+        // hooks
+        if (this.#hooks?.pre) {
+            Object.entries(this.#hooks.pre).forEach(([k, v]) =>
+                schemaObject.pre(k as any, v)
+            );
+        }
+
+        if (this.#hooks?.post) {
+            Object.entries(this.#hooks.post).forEach(([k, v]) =>
+                schemaObject.post(k as any, v)
+            );
+        }
+
+        // methods
+        if (this.#hooks?.method) {
+            Object.entries(this.#hooks.method).forEach(([k, v]) => {
+                schemaObject.methods[k] = v;
             });
         }
 
-        const baseIndex: any = { sortOrder: 1, isActive: 1 };
-        if (this.#config.softDelete) baseIndex.isDeleted = 1;
-        schemaObject.index(baseIndex);
+        // statics ✅ FIXED
+        if (this.#hooks?.statics) {
+            Object.entries(this.#hooks.statics).forEach(([k, v]) => {
+                (schemaObject.statics as any)[k] = v;
+            });
+        }
 
-        if (hooks && hooks.pre) {
-            Object.keys(hooks.pre).forEach((hook) => {
-                if (hooks.pre) {
-                    schemaObject.pre(hook as any, hooks.pre[hook] as any);
-                }
+        // virtuals
+        if (this.#hooks?.virtuals) {
+            Object.entries(this.#hooks.virtuals).forEach(([k, v]) => {
+                schemaObject.virtual(k).get(v as any);
             });
         }
-        if (hooks && hooks.post) {
-            Object.keys(hooks.post).forEach((hook) => {
-                if (hooks.post) {
-                    schemaObject.post(hook as any, hooks.post[hook] as any);
-                }
-            });
-        }
-        if (hooks && hooks.method) {
-            Object.keys(hooks.method).forEach((hook) => {
-                if (hooks.method) {
-                    schemaObject.methods[hook] = hooks.method[hook];
-                }
-            });
-        }
-        if (hooks && hooks.virtuals) {
-            Object.keys(hooks.virtuals).forEach((virtual) => {
-                schemaObject.virtual(virtual).get(hooks.virtuals![virtual] as any);
-            });
-            schemaObject.set("toJSON", {
-                virtuals: true,
-            });
-            schemaObject.set("toObject", {
-                virtuals: true,
-            });
-        }
-        return mongoose.model<T>(modelName, schemaObject);
+
+        return mongoose.model<T>(this.#modelName, schemaObject);
     }
 }
