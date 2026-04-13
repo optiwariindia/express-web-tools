@@ -8,12 +8,18 @@ class API {
     private baseURL: URL = new URL("http://localhost"); // Default value
     private defaultHeaders: Headers = {};
     private client: typeof http | typeof https = http;
+    private agent: https.Agent | undefined
 
     constructor({ baseURL, headers = {}, useHttps = false }: { baseURL: string, headers?: Headers, useHttps?: boolean }) {
         try {
             this.baseURL = new URL(baseURL);
             this.defaultHeaders = headers;
             this.client = useHttps ? https : http;
+            if(useHttps){
+                this.agent = new https.Agent({
+                    rejectUnauthorized: false
+                });
+            }
         } catch (error) {
             throw error;
         }
@@ -44,6 +50,7 @@ class API {
                     ...this.defaultHeaders,
                     ...headers,
                 },
+                agent:this.agent
             };
             const req = this.client.request(options, (res) => {
                 let data = "";
