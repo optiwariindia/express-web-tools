@@ -1,7 +1,7 @@
 export class HttpError extends Error {
     #code: number;
 
-    constructor(message: string, code = 500) {
+    constructor(code: number, message: string = "Internal Server Error") {
         super(message);
         this.#code = code;
     }

@@ -121,7 +121,13 @@ export default class MongooseModel<T extends Document> {
         );
 
         // indexes
-        this.#index.forEach(i => schemaObject.index(i));
+        this.#index.forEach(i => {
+            if (Array.isArray(i)) {
+                schemaObject.index(i[0], i[1]);
+            } else {
+                schemaObject.index(i);
+            }
+        });
 
         // hooks
         if (this.#hooks?.pre) {
@@ -156,6 +162,8 @@ export default class MongooseModel<T extends Document> {
                 schemaObject.virtual(k).get(v as any);
             });
         }
+
+        (schemaObject as any)._config = this.#config;
 
         return mongoose.model<T>(this.#modelName, schemaObject);
     }
