@@ -5,6 +5,7 @@ This document outlines observations and suggested improvements for the `express-
 ## 1. Dependency Management & Configuration
 - **JWT Secret**: Added `Token.config()` to allow programmatic configuration of the secret and optional secret overrides in `generate` and `verify`. [RESOLVED]
 - **Log Path**: `FSLogger` class is now exported, and the default instance uses `process.cwd()`. [RESOLVED]
+- **Peer Dependencies**: `express` and `mongoose` have been moved to `peerDependencies` with broadened version ranges (`express: >=4.0.0`, `mongoose: >=6.0.0`) to avoid version conflicts in consumer projects. [RESOLVED]
 
 ## 2. Robustness & Error Handling
 - **Request Metadata**: `CrudController` now includes `protected validateRequest()` and `validateUser()` methods. These enforce the presence of `origin` and `user._id` while allowing subclasses to override this behavior if those fields are optional. [RESOLVED]

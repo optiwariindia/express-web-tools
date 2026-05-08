@@ -144,6 +144,11 @@ const payload = Token.verify(token);
 npm install express-web-tools
 ```
 
+> **Note**: `express` and `mongoose` are listed as **peer dependencies**. Ensure they are installed in your project:
+> ```bash
+> npm install express mongoose
+> ```
+
 ## License
 
 ISC
