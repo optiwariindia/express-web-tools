@@ -1,7 +1,6 @@
 import { asyncHandler } from "./asyncHandler.js";
 import { Router, Request, Response, RequestHandler } from "express";
 import CrudController from "./CrudController.js";
-import { Document } from "mongoose";
 
 export interface CrudMiddleware {
     global?: RequestHandler[];
@@ -13,7 +12,7 @@ export interface CrudMiddleware {
     delete?: RequestHandler[];
 }
 
-export default class CrudRoutes<T extends Document> {
+export default class CrudRoutes<T> {
     #router: Router;
     #endpoint: string;
     #controller: CrudController<T>;

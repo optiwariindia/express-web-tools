@@ -1,4 +1,4 @@
-import { Model, Document, PopulateOptions } from 'mongoose';
+import { Model, PopulateOptions } from 'mongoose';
 import { Request } from 'express';
 import { ModelConfig } from './MongooseModel.js';
 
@@ -8,7 +8,7 @@ interface CustomRequest extends Request {
     clientIP?: any;
 }
 
-export default class CrudController<T extends Document> {
+export default class CrudController<T> {
     #model: Model<T>;
     _request: CustomRequest = {} as CustomRequest;
 
