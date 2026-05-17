@@ -132,11 +132,58 @@ const payload = Token.verify(token);
 
 ## API Reference Summary
 
-- **`API`**: HTTP/HTTPS client and static response helpers (`API.json`, `API.html`).
-- **`ExpressServer`**: Wrapper to simplify Express app setup, middleware, and routing.
+### `ExpressServer`
+A wrapper to simplify Express app setup, including middleware, routing, and view engines.
+```typescript
+import { ExpressServer } from 'express-web-tools';
+
+const server = new ExpressServer();
+server.views('twig', './views');
+server.addMiddleware(express.json());
+server.addRoute('/api/v1', apiRouter);
+server.start(3000);
+```
+
+### `API`
+Static helpers for standard Express responses and a built-in HTTP/HTTPS client.
+```typescript
+// Response helpers
+API.json(res, { foo: 'bar' }, 'Success message', 200);
+API.html(res, '<h1>Hello</h1>');
+
+// HTTP Client
+const client = new API({ baseURL: 'https://api.example.com', useHttps: true });
+const { status, data } = await client.get('/users');
+```
+
+### `MongooseModel` (Advanced)
+Easily add hooks, virtuals, and static methods to your models.
+```typescript
+const userModelWrapper = new MongooseModel<IUser>('User', userSchema);
+userModelWrapper.addPreHook('save', function(next) {
+    console.log('Saving user...');
+    next();
+});
+userModelWrapper.addStatic('findByUsername', function(username) {
+    return this.findOne({ username });
+});
+const User = userModelWrapper.model();
+```
+
+### Other Utilities
 - **`Mutate`**: High-performance deep cloning using `structuredClone`.
 - **`HttpError`**: Standardized error class for throwing HTTP-specific status codes.
 - **`asyncHandler`**: Middleware to wrap async routes and catch errors automatically.
+- **`configTest`**: Utility to validate presence of essential environment variables on startup.
+
+### `configTest`
+Ensure your application has all required environment variables before starting.
+```typescript
+import { configTest } from 'express-web-tools';
+
+// Throws a descriptive error if variables are missing
+configTest(['MONGO_URI', 'JWT_SECRET', 'PORT']);
+```
 
 ## Installation
 
