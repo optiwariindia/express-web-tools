@@ -143,11 +143,6 @@ export default class CrudController<T> {
         this.validateRequest();
         this.validateUser();
 
-        const query: any = { _id: id };
-        if (this.config.multitenant) {
-            query.origin = this.request.origin;
-        }
-
         try {
             const updatePayload: any = { ...data };
             if (this.config.auditEnforce) {
@@ -157,8 +152,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const updatedItem = await this.#model.findOneAndUpdate(
-                query,
+            const updatedItem = await this.#model.findByIdAndUpdate(
+                id,
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -175,11 +170,6 @@ export default class CrudController<T> {
         this.validateRequest();
         this.validateUser();
 
-        const query: any = { _id: id };
-        if (this.config.multitenant) {
-            query.origin = this.request.origin;
-        }
-
         try {
             const updatePayload: any = { isActive: true };
             if (this.config.auditEnforce) {
@@ -189,8 +179,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const activatedItem = await this.#model.findOneAndUpdate(
-                query,
+            const activatedItem = await this.#model.findByIdAndUpdate(
+                id,
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -207,11 +197,6 @@ export default class CrudController<T> {
         this.validateRequest();
         this.validateUser();
 
-        const query: any = { _id: id };
-        if (this.config.multitenant) {
-            query.origin = this.request.origin;
-        }
-
         try {
             const updatePayload: any = { isActive: false };
             if (this.config.auditEnforce) {
@@ -221,8 +206,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const deactivatedItem = await this.#model.findOneAndUpdate(
-                query,
+            const deactivatedItem = await this.#model.findByIdAndUpdate(
+                id,
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -239,11 +224,6 @@ export default class CrudController<T> {
         this.validateRequest();
         this.validateUser();
 
-        const query: any = { _id: id };
-        if (this.config.multitenant) {
-            query.origin = this.request.origin;
-        }
-
         try {
             const updatePayload: any = {};
             if (this.config.softDelete) {
@@ -251,9 +231,9 @@ export default class CrudController<T> {
                 updatePayload.deleted = { At: new Date(), By: this.request?.user?._id };
             }
 
-            const deletedItem = await this.#model.findOneAndUpdate(
-                query,
-                this.config.softDelete ? updatePayload : { $set: { isDeleted: true } }, // fallback if softDelete logic differs
+            const deletedItem = await this.#model.findByIdAndUpdate(
+                id,
+                this.config.softDelete ? updatePayload : { $set: { isDeleted: true } },
                 returnUpdatedDocumentOptions
             );
 
@@ -261,7 +241,7 @@ export default class CrudController<T> {
             // the user might expect a hard delete or it might fail if field doesn't exist.
             // For now, we respect the softDelete flag.
             if (!this.config.softDelete) {
-                return await this.#model.findOneAndDelete(query);
+                return await this.#model.findByIdAndDelete(id);
             }
 
             if (!deletedItem) {
@@ -269,6 +249,7 @@ export default class CrudController<T> {
             }
             return deletedItem;
         } catch (error: any) {
+            console.log(error)
             throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
