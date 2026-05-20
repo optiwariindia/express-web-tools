@@ -1,6 +1,10 @@
-import { Model, PopulateOptions } from 'mongoose';
+import mongoose, { Model, PopulateOptions } from 'mongoose';
 import { Request } from 'express';
 import { ModelConfig } from './MongooseModel.js';
+
+const returnUpdatedDocumentOptions = Number(mongoose.version.split('.')[0]) >= 6
+    ? { returnDocument: 'after' as const }
+    : { new: true };
 
 interface CustomRequest extends Request {
     user?: any;
@@ -156,7 +160,7 @@ export default class CrudController<T> {
             const updatedItem = await this.#model.findOneAndUpdate(
                 query,
                 updatePayload,
-                { new: true }
+                returnUpdatedDocumentOptions
             );
             if (!updatedItem) {
                 throw new Error('Item not found');
@@ -188,7 +192,7 @@ export default class CrudController<T> {
             const activatedItem = await this.#model.findOneAndUpdate(
                 query,
                 updatePayload,
-                { new: true }
+                returnUpdatedDocumentOptions
             );
             if (!activatedItem) {
                 throw new Error('Item not found');
@@ -220,7 +224,7 @@ export default class CrudController<T> {
             const deactivatedItem = await this.#model.findOneAndUpdate(
                 query,
                 updatePayload,
-                { new: true }
+                returnUpdatedDocumentOptions
             );
             if (!deactivatedItem) {
                 throw new Error('Item not found');
@@ -250,7 +254,7 @@ export default class CrudController<T> {
             const deletedItem = await this.#model.findOneAndUpdate(
                 query,
                 this.config.softDelete ? updatePayload : { $set: { isDeleted: true } }, // fallback if softDelete logic differs
-                { new: true }
+                returnUpdatedDocumentOptions
             );
 
             // If softDelete is disabled in config, but we called delete, 

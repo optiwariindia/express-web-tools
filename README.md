@@ -195,6 +195,9 @@ npm install express-web-tools
 > ```bash
 > npm install express mongoose
 > ```
+>
+> ### Mongoose Compatibility
+> The library automatically handles version differences for Mongoose. For Mongoose v6 and above, it uses `returnDocument: 'after'` for update operations, while falling back to `new: true` for older versions, ensuring you always receive the updated document.
 
 ## License
 

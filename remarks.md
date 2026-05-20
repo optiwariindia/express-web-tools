@@ -36,3 +36,6 @@ This document outlines observations and suggested improvements for the `express-
 
 ## 8. Missing Exports
 - **`EventStream` not exported**: `EventStream.ts` is now properly exported in `src/index.ts`. [RESOLVED]
+
+## 9. Mongoose Version Compatibility
+- **`findOneAndUpdate` Options**: `CrudController` now dynamically selects update options based on the Mongoose version. It uses `returnDocument: 'after'` for Mongoose v6+ and `new: true` for older versions to ensure consistency in returning the updated document. [RESOLVED]
