@@ -3,5 +3,5 @@ Milestone 1: Project Maintenance
 ✔ Update README.md with detailed examples @done(2026-05-17 10:05)
 ✔ Add configTest to README.md @done(2026-05-17 10:12)
 ✔ Bump version to 1.0.15 in package.json @done(2026-05-20 14:15)
-☐ Patch version to 1.0.16 and publish to npm
+✔ Patch version to 1.0.16 and publish to npm @done(2026-05-20 14:30)
 ✔ Update documentation for Mongoose upsert options (v6 compatibility) @done(2026-05-20 14:00)
