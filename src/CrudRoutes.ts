@@ -85,11 +85,15 @@ export default class CrudRoutes<T> {
     }
 
     publish(): Router {
+        let endpoint = this.#endpoint;
+        if (!endpoint.endsWith("/")) {
+            endpoint += "/"
+        }
         const m = this.#middleware;
         const g = m.global || [];
 
         this.#router
-            .route(this.#endpoint)
+            .route(endpoint)
             .get(
                 ...g,
                 ...(m.listAll || []),
@@ -105,9 +109,9 @@ export default class CrudRoutes<T> {
                 ...(m.add || []),
                 asyncHandler(this.add.bind(this))
             );
-
+        endpoint += ":id";
         this.#router
-            .route(`${this.#endpoint}/:id`)
+            .route(endpoint)
             .get(
                 ...g,
                 ...(m.read || []),
