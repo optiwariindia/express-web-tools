@@ -15,7 +15,7 @@ class API {
             this.baseURL = new URL(baseURL);
             this.defaultHeaders = headers;
             this.client = useHttps ? https : http;
-            if(useHttps){
+            if (useHttps) {
                 this.agent = new https.Agent({
                     rejectUnauthorized: false
                 });
@@ -42,7 +42,7 @@ class API {
             const options = {
                 hostname: this.baseURL.hostname,
                 port: this.baseURL.port,
-                path,
+                path: this.baseURL.pathname + path,
                 method,
                 headers: {
                     "Content-Type": "application/json",
@@ -50,7 +50,7 @@ class API {
                     ...this.defaultHeaders,
                     ...headers,
                 },
-                agent:this.agent
+                agent: this.agent
             };
             const req = this.client.request(options, (res) => {
                 let data = "";
