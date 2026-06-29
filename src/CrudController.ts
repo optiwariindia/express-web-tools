@@ -123,16 +123,16 @@ export default class CrudController<T> {
         }
     }
     async moveUp(id: string) {
-        let currentSortOrder = await this.#model.findById(id).lean() as { sortOrder: number } | null;
-        let nextSortOrder = Number(currentSortOrder) + 1;
-        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
+        let current = await this.#model.findById(id).lean() as { sortOrder: number } | null;
+        let nextSortOrder = Number(current?.sortOrder) + 1;
+        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: current?.sortOrder } })
         await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
         return true;
     }
     async moveDown(id: string) {
-        let currentSortOrder = await this.#model.findById(id).lean() as { sortOrder: number } | null;
-        let nextSortOrder = Number(currentSortOrder) - 1;
-        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
+        let current = await this.#model.findById(id).lean() as { sortOrder: number } | null;
+        let nextSortOrder = Number(current?.sortOrder) - 1;
+        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: current?.sortOrder } })
         await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
         return true;
     }

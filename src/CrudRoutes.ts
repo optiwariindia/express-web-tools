@@ -92,10 +92,10 @@ export default class CrudRoutes<T> {
         let data;
         switch (action) {
             case "move-up":
-                data = this.moveUp(req.params.id as string);
+                data = await this.moveUp(req.params.id as string);
                 break;
             case "move-down":
-                data = this.moveDown(req.params.id as string);
+                data = await this.moveDown(req.params.id as string);
                 break;
 
             default:
