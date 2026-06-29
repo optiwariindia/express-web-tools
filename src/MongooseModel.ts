@@ -24,7 +24,6 @@ export default class MongooseModel<T extends Document> {
     #schema: Schema;
     #index: any[];
     #hooks: Hooks<T> | null;
-    #userSchema: string = "User";
     #config: ModelConfig;
 
     constructor(

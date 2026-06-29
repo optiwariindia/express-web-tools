@@ -108,28 +108,44 @@ export default class CrudController<T> {
             if (this.config.multitenant) {
                 temp.origin = this.request.origin;
             }
-
+            let lastDoc = await this
+                .#model
+                .findOne({}, { sortOrder: 1, _id: 0 })
+                .sort({ sortOrder: -1 })
+                .lean() as { sortOrder?: number } | null;
+            let sortOrder = Number(lastDoc?.sortOrder ?? 0)
+            if (!sortOrder) sortOrder = 0;
+            temp.sortOrder = sortOrder + 1;
             const newItem = await this.#model.create(temp);
             return newItem;
         } catch (error: any) {
             throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
-
+    async moveUp(id: string) {
+        let currentSortOrder = await this.#model.findById(id).lean() as { sortOrder: number } | null;
+        let nextSortOrder = Number(currentSortOrder) + 1;
+        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
+        await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+    }
+    async moveDown(id: string) {
+        let currentSortOrder = await this.#model.findById(id).lean() as { sortOrder: number } | null;
+        let nextSortOrder = Number(currentSortOrder) - 1;
+        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
+        await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+    }
     async read(id: string, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
         const query: any = { _id: id };
         if (this.config.multitenant) {
             this.validateRequest();
             query.origin = this.request.origin;
         }
-
         try {
             let item;
             if (!populateFields)
                 item = await this.#model.findOne(query);
             else
                 item = await this.#model.findOne(query).populate(populateFields);
-
             if (!item) {
                 throw new Error('Item not found');
             }
