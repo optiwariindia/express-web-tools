@@ -1,6 +1,7 @@
 import { asyncHandler } from "./asyncHandler.js";
 import { Router, Request, Response, RequestHandler } from "express";
 import CrudController from "./CrudController.js";
+import { HttpError } from "./HTTPError.js";
 
 export interface CrudMiddleware {
     global?: RequestHandler[];
@@ -10,6 +11,7 @@ export interface CrudMiddleware {
     read?: RequestHandler[];
     update?: RequestHandler[];
     delete?: RequestHandler[];
+    order?: RequestHandler[];
 }
 
 export default class CrudRoutes<T> {
@@ -83,7 +85,30 @@ export default class CrudRoutes<T> {
         let data = await this.#controller.delete(req.params.id as string);
         return this.response(res, data, "Deleted successfully");
     }
+    async reorder(req: Request, res: Response) {
+        this.setRequest(req);
+        const { action } = req.body;
+        if (!action) throw new HttpError(401, "Invalid request");
+        let data;
+        switch (action) {
+            case "move-up":
+                data = this.moveUp(req.params.id as string);
+                break;
+            case "move-down":
+                data = this.moveDown(req.params.id as string);
+                break;
 
+            default:
+                break;
+        }
+        return this.response(res, data, "");
+    }
+    async moveUp(id: string) {
+        return await this.#controller.moveUp(id);
+    }
+    async moveDown(id: string) {
+        return await this.#controller.moveDown(id);
+    }
     publish(): Router {
         let endpoint = this.#endpoint;
         if (!endpoint.endsWith("/")) {
@@ -121,6 +146,11 @@ export default class CrudRoutes<T> {
                 ...g,
                 ...(m.update || []),
                 asyncHandler(this.update.bind(this))
+            )
+            .patch(
+                ...g,
+                ...(m.order || []),
+                asyncHandler(this.reorder.bind(this))
             )
             .delete(
                 ...g,

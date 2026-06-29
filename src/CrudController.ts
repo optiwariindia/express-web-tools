@@ -127,12 +127,14 @@ export default class CrudController<T> {
         let nextSortOrder = Number(currentSortOrder) + 1;
         await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
         await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+        return true;
     }
     async moveDown(id: string) {
         let currentSortOrder = await this.#model.findById(id).lean() as { sortOrder: number } | null;
         let nextSortOrder = Number(currentSortOrder) - 1;
         await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: currentSortOrder } })
         await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+        return true;
     }
     async read(id: string, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
         const query: any = { _id: id };
