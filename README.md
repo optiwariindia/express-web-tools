@@ -191,9 +191,9 @@ configTest(['MONGO_URI', 'JWT_SECRET', 'PORT']);
 npm install express-web-tools
 ```
 
-> **Note**: `express` and `mongoose` are listed as **peer dependencies**. Ensure they are installed in your project:
+> **Note**: `express`, `mongoose`, `bcryptjs`, and `jsonwebtoken` are listed as **peer dependencies**. Ensure they are installed in your project:
 > ```bash
-> npm install express mongoose
+> npm install express mongoose bcryptjs jsonwebtoken
 > ```
 >
 > ### Mongoose Compatibility

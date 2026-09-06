@@ -28,16 +28,16 @@
   "author": "Om Prakash Tiwari <optiwari.india@gmail.com>",
   "license": "ISC",
   "type": "module",
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.0"
-  },
   "peerDependencies": {
+    "bcryptjs": ">=2.4.0",
     "express": ">=4.0.0",
+    "jsonwebtoken": ">=9.0.0",
     "mongoose": ">=6.0.0"
   },
   "devDependencies": {
+    "bcryptjs": "^2.4.3",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
     "mongoose": "^8.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
