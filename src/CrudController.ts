@@ -64,6 +64,11 @@ export default class CrudController<T> {
         return filters;
     }
 
+    /** Keep caller filters from overriding the controller's access filters. */
+    private scopedQuery(query: Record<string, any> = {}): Record<string, any> {
+        return { ...query, ...this.commonFilters };
+    }
+
     set request(req: CustomRequest) {
         this._request = req;
     }
@@ -74,6 +79,52 @@ export default class CrudController<T> {
 
     get model(): Model<T> {
         return this.#model;
+    }
+
+    /** Build an ID filter that stays within the active tenant when enabled. */
+    private scopedIdFilter(id: string): Record<string, unknown> {
+        const filter: Record<string, unknown> = { _id: new mongoose.Types.ObjectId(id) };
+        if (this.config.multitenant) {
+            this.validateRequest();
+            filter.origin = this.request.origin;
+        }
+        return filter;
+    }
+
+    /** Remove protected fields from direct and operator-style updates. */
+    private sanitizeUpdateFields(data: Record<string, any>): Record<string, any> {
+        const update: Record<string, any> = { ...data };
+        const allowedSystemFields = this.config.allowSystemFieldUpdates
+            ? []
+            : ['sortOrder', 'isActive', 'isDeleted'];
+
+        const isProtectedPath = (path: string) =>
+            path === 'origin' || path.startsWith('origin.') ||
+            allowedSystemFields.some(field => path === field || path.startsWith(`${field}.`));
+
+        for (const field of Object.keys(update)) {
+            if (!field.startsWith('$') && isProtectedPath(field)) {
+                delete update[field];
+            }
+        }
+
+        for (const [operator, fields] of Object.entries(update)) {
+            if (!operator.startsWith('$') || !fields || typeof fields !== 'object' || Array.isArray(fields)) {
+                continue;
+            }
+
+            const safeFields = { ...fields };
+            for (const [path, value] of Object.entries(safeFields)) {
+                if (isProtectedPath(path)) {
+                    delete safeFields[path];
+                } else if (operator === '$rename' && typeof value === 'string' && isProtectedPath(value)) {
+                    delete safeFields[path];
+                }
+            }
+            update[operator] = safeFields;
+        }
+
+        return update;
     }
 
     set model(model: Model<T>) {
@@ -123,17 +174,25 @@ export default class CrudController<T> {
         }
     }
     async moveUp(id: string) {
-        let current = await this.#model.findById(id).lean() as { sortOrder: number } | null;
-        let nextSortOrder = Number(current?.sortOrder) + 1;
-        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: current?.sortOrder } })
-        await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+        const filter = this.scopedIdFilter(id);
+        const current = await this.#model.findOne(filter).lean() as { sortOrder: number } | null;
+        if (!current) throw new Error('[CrudController Error]: Item not found');
+        const nextSortOrder = Number(current.sortOrder) + 1;
+        const adjacentFilter: Record<string, unknown> = { sortOrder: nextSortOrder };
+        if (this.config.multitenant) adjacentFilter.origin = this.request.origin;
+        await this.#model.updateOne(adjacentFilter, { $set: { sortOrder: current.sortOrder } });
+        await this.#model.findOneAndUpdate(filter, { sortOrder: nextSortOrder });
         return true;
     }
     async moveDown(id: string) {
-        let current = await this.#model.findById(id).lean() as { sortOrder: number } | null;
-        let nextSortOrder = Number(current?.sortOrder) - 1;
-        await this.#model.updateOne({ sortOrder: nextSortOrder }, { $set: { sortOrder: current?.sortOrder } })
-        await this.#model.findByIdAndUpdate(id, { sortOrder: nextSortOrder })
+        const filter = this.scopedIdFilter(id);
+        const current = await this.#model.findOne(filter).lean() as { sortOrder: number } | null;
+        if (!current) throw new Error('[CrudController Error]: Item not found');
+        const nextSortOrder = Number(current.sortOrder) - 1;
+        const adjacentFilter: Record<string, unknown> = { sortOrder: nextSortOrder };
+        if (this.config.multitenant) adjacentFilter.origin = this.request.origin;
+        await this.#model.updateOne(adjacentFilter, { $set: { sortOrder: current.sortOrder } });
+        await this.#model.findOneAndUpdate(filter, { sortOrder: nextSortOrder });
         return true;
     }
     async read(id: string, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
@@ -162,7 +221,7 @@ export default class CrudController<T> {
         this.validateUser();
 
         try {
-            const updatePayload: any = { ...data };
+            const updatePayload = this.sanitizeUpdateFields(data);
             if (this.config.auditEnforce) {
                 updatePayload.updated = {
                     By: this.request.user._id,
@@ -170,8 +229,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const updatedItem = await this.#model.findByIdAndUpdate(
-                id,
+            const updatedItem = await this.#model.findOneAndUpdate(
+                this.scopedIdFilter(id),
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -197,8 +256,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const activatedItem = await this.#model.findByIdAndUpdate(
-                id,
+            const activatedItem = await this.#model.findOneAndUpdate(
+                this.scopedIdFilter(id),
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -224,8 +283,8 @@ export default class CrudController<T> {
                 };
             }
 
-            const deactivatedItem = await this.#model.findByIdAndUpdate(
-                id,
+            const deactivatedItem = await this.#model.findOneAndUpdate(
+                this.scopedIdFilter(id),
                 updatePayload,
                 returnUpdatedDocumentOptions
             );
@@ -249,8 +308,8 @@ export default class CrudController<T> {
                 updatePayload.deleted = { At: new Date(), By: this.request?.user?._id };
             }
 
-            const deletedItem = await this.#model.findByIdAndUpdate(
-                id,
+            const deletedItem = await this.#model.findOneAndUpdate(
+                this.scopedIdFilter(id),
                 this.config.softDelete ? updatePayload : { $set: { isDeleted: true } },
                 returnUpdatedDocumentOptions
             );
@@ -259,7 +318,7 @@ export default class CrudController<T> {
             // the user might expect a hard delete or it might fail if field doesn't exist.
             // For now, we respect the softDelete flag.
             if (!this.config.softDelete) {
-                return await this.#model.findByIdAndDelete(id);
+                return await this.#model.findOneAndDelete(this.scopedIdFilter(id));
             }
 
             if (!deletedItem) {
@@ -279,10 +338,7 @@ export default class CrudController<T> {
                 sortOrder.createdAt = -1;
             }
 
-            let temp = this.#model.find({
-                ...this.commonFilters,
-                ...query
-            });
+            let temp = this.#model.find(this.scopedQuery(query));
             temp = temp.sort(sortOrder);
             if (populateFields) temp = temp.populate(populateFields);
             // if (project) temp = temp.select(project);
@@ -296,7 +352,7 @@ export default class CrudController<T> {
 
     async count(query: any = {}): Promise<number> {
         try {
-            const count = await this.#model.countDocuments({ ...this.commonFilters, ...query });
+            const count = await this.#model.countDocuments(this.scopedQuery(query));
             return count;
         } catch (error: any) {
             throw new Error(`[CrudController Error]: ${error.message}`);
@@ -306,8 +362,8 @@ export default class CrudController<T> {
     async findOne(query: any, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
         try {
             if (!populateFields)
-                return await this.#model.findOne({ ...this.commonFilters, ...query });
-            return await this.#model.findOne({ ...this.commonFilters, ...query }).populate(populateFields);
+                return await this.#model.findOne(this.scopedQuery(query));
+            return await this.#model.findOne(this.scopedQuery(query)).populate(populateFields);
         } catch (error: any) {
             throw new Error(`[CrudController Error]: ${error.message}`);
         }

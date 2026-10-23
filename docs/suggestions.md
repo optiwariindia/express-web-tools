@@ -1,58 +1,44 @@
-# Suggestions for Removing Specific Version Dependencies
+# Code Review Updates
 
-## Current State
-The library currently has `express` and `mongoose` listed as direct `dependencies` in `package.json`:
-- `express`: `^4.18.2`
-- `mongoose`: `^8.0.0`
+Work through these items sequentially. Each item should be implemented and reviewed before starting the next.
 
-This forces consumers to use these specific versions (or compatible ranges), which can lead to version conflicts (multiple versions of the same library in `node_modules`) if the consumer project uses different versions.
+## 1. Enforce tenant scoping on record mutations — High — Complete
+- Add the current tenant (`origin`) to the database filters used by `update`, `delete`, `activate`, `deactivate`, `moveUp`, and `moveDown` when multitenancy is enabled.
+- Ensure a missing or cross-tenant record produces the existing not-found behavior and cannot be modified.
+- Review `upsert` and any other ID-based mutations for the same issue.
+- Explicitly convert string IDs to `mongoose.Types.ObjectId` in the shared ID filter, and strip `origin` from direct and operator-style update payloads.
 
-## Proposed View
-As a library designed to be used within other Express/Mongoose applications, `express-web-tools` should not bundle or strictly require a specific version of these "framework" libraries. Instead, it should:
-1.  **Treat them as Peer Dependencies:** Expect the consumer to provide them.
-2.  **Support a Broad Range:** Allow multiple major versions if the codebase is compatible.
+## 2. Prevent caller filters from overriding access filters — High — Complete
+- Change `list`, `count`, and `findOne` so caller-supplied query fields cannot override enforced `origin`, `isActive`, or `isDeleted` filters.
+- Conflicting fields are safely overridden by the controller's access filters.
 
-## Plan of Action
+## 3. Protect system-managed fields during updates — High - Complete
+- Prevent update payloads from changing `origin`, deletion/activation state, sort order, timestamps, and audit metadata unless an explicit trusted API is intended to allow it.
+- Keep server-generated audit fields authoritative.
+- **Complete:** `allowSystemFieldUpdates` configures whether `sortOrder`, `isActive`, and `isDeleted` may be set through `update`; `origin` remains protected.
 
-### 1. Update `package.json`
-- Move `express` and `mongoose` from `dependencies` to `peerDependencies`.
-- Broaden the version ranges in `peerDependencies`:
-    - `express`: `>=4.0.0` (Express 4 is very stable and widely used).
-    - `mongoose`: `>=6.0.0` (Supporting 6, 7, and 8).
-- Keep (or update) them in `devDependencies` to ensure the library can still be built and tested locally.
-- Fix type definition version mismatches in `devDependencies`.
+## 4. Make reorder operations safe — Medium
+- Return not-found when the target item does not exist.
+- Scope both the target and adjacent-item lookup/update to the current tenant.
+- Handle first/last positions and missing adjacent sort orders without creating invalid values; consider an atomic swap to avoid concurrent reorder corruption.
 
-### 2. Verify Compatibility
-- The current codebase uses standard features of Express (Router, Request, Response, Middleware) and Mongoose (Schema, Model, Hooks, Querying). These have remained largely consistent across recent major versions.
-- **Mongoose 6 vs 7 vs 8:** Key differences are often around TypeScript types and internal handling, but the core API used in `MongooseModel.ts` and `CrudController.ts` appears compatible.
+## 5. Correct API URL and protocol handling — Medium
+- Select `http` or `https` from the parsed `baseURL` protocol, or validate that `useHttps` agrees with it.
+- Build the request URL with URL resolution so base paths, leading slashes, query strings, and encoded path segments behave consistently.
+- Reject unsupported protocols with a clear error.
 
-### 3. Implementation Steps
-1.  **Refactor `package.json`**:
-    ```json
-    "peerDependencies": {
-      "express": ">=4.0.0",
-      "mongoose": ">=6.0.0"
-    },
-    "devDependencies": {
-      "express": "^4.18.2",
-      "mongoose": "^8.0.0",
-      ...
-    }
-    ```
-2.  **Remove from `dependencies`**:
-    ```bash
-    npm uninstall express mongoose
-    ```
-3.  **Install as `devDependencies`**:
-    ```bash
-    npm install express mongoose --save-dev
-    ```
+## 6. Restore HTTPS certificate validation — Medium
+- Remove `rejectUnauthorized: false` from the HTTPS agent default.
+- If custom certificates are needed, expose a deliberate TLS configuration that preserves certificate validation by default.
 
-## Benefits
-- **Reduced Bundle Size/Complexity:** No risk of installing duplicate versions in the consumer's `node_modules`.
-- **Flexibility:** Consumers can upgrade their own `express` or `mongoose` versions without waiting for a library update, as long as the API remains compatible.
-- **Better Ecosystem Alignment:** This is the standard practice for middleware and extension libraries in the Node.js ecosystem.
+## 7. Remove shell interpolation from log archival — Medium
+- Replace the interpolated `tar`/`rm` command in `FSLogger.Archive()` with safe process arguments or filesystem APIs.
+- Remove the source log only after archive creation succeeds, and reject on archive or removal failures.
 
----
-**Lead Engineer:** Sanket
-**Date:** May 8, 2026
+## 8. Clean up CRUD behavior and dead code — Low
+- Remove the unreachable second return in `list` and check whether `.select(null)` is intended when no projection is supplied.
+- Remove error logging of full exceptions from CRUD methods (or route errors through a configurable logger) to avoid noisy or sensitive console output.
+- Clarify the hard-delete path when `softDelete` is disabled; it currently performs an unnecessary update before deleting.
+
+## 9. Verify each change
+- Build after each sequential update and add focused regression coverage for tenant isolation, protected fields, reorder boundaries, URL composition, TLS defaults, and archive failures.

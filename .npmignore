@@ -6,3 +6,7 @@ node_modules/
 *.tgz
 .DS_Store
 *.map
+.vscode/
+docs/
+project.todo
+remarks.md

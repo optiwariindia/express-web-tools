@@ -17,6 +17,7 @@ export interface ModelConfig {
     multitenant?: boolean;
     auditEnforce?: boolean;
     timestamps?: boolean;
+    allowSystemFieldUpdates?: boolean;
 }
 
 export default class MongooseModel<T extends Document> {
@@ -43,6 +44,7 @@ export default class MongooseModel<T extends Document> {
             multitenant: true,
             auditEnforce: true,
             timestamps: true,
+            allowSystemFieldUpdates: false,
             ...config
         };
     }
