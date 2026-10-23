@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 
 function seconds(n: number): number {
@@ -78,9 +78,33 @@ class FSLogger {
 
     Archive(): Promise<string> {
         return new Promise((resolve, reject) => {
-            exec(`tar -cJf  ${this.#path}-$(date +%Y-%m-%d-%H%M%S).tar.xz ${this.#path}; rm -f ${this.#path}`, (err, stdout, stderr) => {
-                if (err) reject(err);
-                resolve(stdout);
+            const sourcePath = fs.realpathSync(this.#path);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const archivePath = `${sourcePath}-${timestamp}.tar.xz`;
+            const tar = spawn("tar", ["-cJf", archivePath, "--", sourcePath]);
+            let settled = false;
+
+            tar.once("error", (error) => {
+                settled = true;
+                reject(error);
+            });
+
+            tar.once("close", async (code, signal) => {
+                if (settled) return;
+                if (code !== 0) {
+                    settled = true;
+                    reject(new Error(`tar failed${signal ? ` (signal ${signal})` : ` with exit code ${code}`}`));
+                    return;
+                }
+
+                try {
+                    await fs.promises.unlink(sourcePath);
+                    settled = true;
+                    resolve(archivePath);
+                } catch (error) {
+                    settled = true;
+                    reject(error);
+                }
             });
         });
     }

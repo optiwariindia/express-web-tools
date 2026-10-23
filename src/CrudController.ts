@@ -173,27 +173,66 @@ export default class CrudController<T> {
             throw new Error(`[CrudController Error]: ${error.message}`);
         }
     }
-    async moveUp(id: string) {
-        const filter = this.scopedIdFilter(id);
-        const current = await this.#model.findOne(filter).lean() as { sortOrder: number } | null;
-        if (!current) throw new Error('[CrudController Error]: Item not found');
-        const nextSortOrder = Number(current.sortOrder) + 1;
-        const adjacentFilter: Record<string, unknown> = { sortOrder: nextSortOrder };
-        if (this.config.multitenant) adjacentFilter.origin = this.request.origin;
-        await this.#model.updateOne(adjacentFilter, { $set: { sortOrder: current.sortOrder } });
-        await this.#model.findOneAndUpdate(filter, { sortOrder: nextSortOrder });
-        return true;
+    private async move(id: string, direction: 'up' | 'down'): Promise<boolean> {
+        const targetFilter = this.scopedIdFilter(id);
+        const session = await this.#model.db.startSession();
+
+        try {
+            await session.withTransaction(async () => {
+                const current = await this.#model.findOne(targetFilter).session(session).lean() as
+                    { _id: mongoose.Types.ObjectId; sortOrder?: number } | null;
+                if (!current) throw new Error('[CrudController Error]: Item not found');
+
+                const currentOrder = Number(current.sortOrder);
+                // A malformed order cannot be swapped safely. Leave it untouched instead of
+                // writing NaN or another invalid value into the collection.
+                if (!Number.isFinite(currentOrder)) return;
+
+                const adjacentFilter: Record<string, any> = {
+                    _id: { $ne: current._id },
+                    sortOrder: direction === 'up' ? { $gt: currentOrder } : { $lt: currentOrder }
+                };
+                if (this.config.multitenant) adjacentFilter.origin = this.request.origin;
+
+                const adjacent = await this.#model.findOne(adjacentFilter)
+                    .sort({ sortOrder: direction === 'up' ? 1 : -1, _id: 1 })
+                    .session(session)
+                    .lean() as { _id: mongoose.Types.ObjectId; sortOrder?: number } | null;
+
+                // The item is already at the requested boundary.
+                if (!adjacent) return;
+                const adjacentOrder = Number(adjacent.sortOrder);
+                if (!Number.isFinite(adjacentOrder)) return;
+
+                const adjacentIdFilter = this.scopedIdFilter(String(adjacent._id));
+                const currentUpdate = await this.#model.updateOne(
+                    { ...targetFilter, sortOrder: currentOrder },
+                    { $set: { sortOrder: adjacentOrder } },
+                    { session }
+                );
+                const adjacentUpdate = await this.#model.updateOne(
+                    { ...adjacentIdFilter, sortOrder: adjacentOrder },
+                    { $set: { sortOrder: currentOrder } },
+                    { session }
+                );
+
+                // Abort if either row changed while we were choosing the pair.
+                if (currentUpdate.modifiedCount !== 1 || adjacentUpdate.modifiedCount !== 1) {
+                    throw new Error('[CrudController Error]: Items changed during reorder; retry the operation.');
+                }
+            });
+            return true;
+        } finally {
+            await session.endSession();
+        }
     }
-    async moveDown(id: string) {
-        const filter = this.scopedIdFilter(id);
-        const current = await this.#model.findOne(filter).lean() as { sortOrder: number } | null;
-        if (!current) throw new Error('[CrudController Error]: Item not found');
-        const nextSortOrder = Number(current.sortOrder) - 1;
-        const adjacentFilter: Record<string, unknown> = { sortOrder: nextSortOrder };
-        if (this.config.multitenant) adjacentFilter.origin = this.request.origin;
-        await this.#model.updateOne(adjacentFilter, { $set: { sortOrder: current.sortOrder } });
-        await this.#model.findOneAndUpdate(filter, { sortOrder: nextSortOrder });
-        return true;
+
+    async moveUp(id: string): Promise<boolean> {
+        return this.move(id, 'up');
+    }
+
+    async moveDown(id: string): Promise<boolean> {
+        return this.move(id, 'down');
     }
     async read(id: string, populateFields: PopulateOptions | (string | PopulateOptions)[] | null = null): Promise<T | null> {
         const query: any = { _id: id };

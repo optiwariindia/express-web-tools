@@ -8,21 +8,23 @@ class API {
     private baseURL: URL = new URL("http://localhost"); // Default value
     private defaultHeaders: Headers = {};
     private client: typeof http | typeof https = http;
-    private agent: https.Agent | undefined
 
-    constructor({ baseURL, headers = {}, useHttps = false }: { baseURL: string, headers?: Headers, useHttps?: boolean }) {
-        try {
-            this.baseURL = new URL(baseURL);
-            this.defaultHeaders = headers;
-            this.client = useHttps ? https : http;
-            if (useHttps) {
-                this.agent = new https.Agent({
-                    rejectUnauthorized: false
-                });
-            }
-        } catch (error) {
-            throw error;
+    constructor({ baseURL, headers = {}, useHttps }: { baseURL: string, headers?: Headers, useHttps?: boolean }) {
+        this.baseURL = new URL(baseURL);
+        if (this.baseURL.protocol !== "http:" && this.baseURL.protocol !== "https:") {
+            throw new Error(`Unsupported API URL protocol: ${this.baseURL.protocol}`);
         }
+
+        const isHttps = this.baseURL.protocol === "https:";
+        if (useHttps !== undefined && useHttps !== isHttps) {
+            throw new Error(`useHttps must match the baseURL protocol (${this.baseURL.protocol})`);
+        }
+
+        // Keep a trailing slash so relative request paths resolve beneath a base path.
+        if (!this.baseURL.pathname.endsWith("/")) this.baseURL.pathname += "/";
+
+        this.defaultHeaders = headers;
+        this.client = isHttps ? https : http;
     }
 
     static json(res: Response, data: any, message = "Success", code = 200) {
@@ -39,10 +41,15 @@ class API {
 
     request(method: string, path: string, body: any = null, headers: Headers = {}): Promise<{ status: number | undefined, data: any }> {
         return new Promise((resolve, reject) => {
+            let url: URL;
+            try {
+                url = new URL(path, this.baseURL);
+            } catch (error) {
+                reject(error);
+                return;
+            }
+
             const options = {
-                hostname: this.baseURL.hostname,
-                port: this.baseURL.port,
-                path: this.baseURL.pathname + path,
                 method,
                 headers: {
                     "Content-Type": "application/json",
@@ -50,9 +57,8 @@ class API {
                     ...this.defaultHeaders,
                     ...headers,
                 },
-                agent: this.agent
             };
-            const req = this.client.request(options, (res) => {
+            const req = this.client.request(url, options, (res) => {
                 let data = "";
 
                 res.on("data", (chunk) => {

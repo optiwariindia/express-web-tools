@@ -17,23 +17,23 @@ Work through these items sequentially. Each item should be implemented and revie
 - Keep server-generated audit fields authoritative.
 - **Complete:** `allowSystemFieldUpdates` configures whether `sortOrder`, `isActive`, and `isDeleted` may be set through `update`; `origin` remains protected.
 
-## 4. Make reorder operations safe — Medium
+## 4. Make reorder operations safe — Medium — Complete
 - Return not-found when the target item does not exist.
 - Scope both the target and adjacent-item lookup/update to the current tenant.
-- Handle first/last positions and missing adjacent sort orders without creating invalid values; consider an atomic swap to avoid concurrent reorder corruption.
+- Find the nearest item in the requested direction rather than assuming sort orders are contiguous; leave boundary items and items with invalid sort orders unchanged.
+- Swap both sort orders in a transaction with conditional updates to avoid concurrent reorder corruption. MongoDB transactions require a replica set or sharded cluster.
 
-## 5. Correct API URL and protocol handling — Medium
+## 5. Correct API URL and protocol handling — Medium — Complete
 - Select `http` or `https` from the parsed `baseURL` protocol, or validate that `useHttps` agrees with it.
 - Build the request URL with URL resolution so base paths, leading slashes, query strings, and encoded path segments behave consistently.
 - Reject unsupported protocols with a clear error.
 
-## 6. Restore HTTPS certificate validation — Medium
-- Remove `rejectUnauthorized: false` from the HTTPS agent default.
-- If custom certificates are needed, expose a deliberate TLS configuration that preserves certificate validation by default.
+## 6. Restore HTTPS certificate validation — Medium — Complete
+- Removed the custom HTTPS agent that disabled certificate validation. HTTPS now uses Node's validated TLS defaults; there is no custom certificate option.
 
-## 7. Remove shell interpolation from log archival — Medium
-- Replace the interpolated `tar`/`rm` command in `FSLogger.Archive()` with safe process arguments or filesystem APIs.
-- Remove the source log only after archive creation succeeds, and reject on archive or removal failures.
+## 7. Remove shell interpolation from log archival — Medium — Complete
+- Replaced the interpolated `tar`/`rm` command in `FSLogger.Archive()` with `spawn()` and an argument array.
+- The source log is removed only after archive creation succeeds; archive and source-removal failures reject the promise.
 
 ## 8. Clean up CRUD behavior and dead code — Low
 - Remove the unreachable second return in `list` and check whether `.select(null)` is intended when no projection is supplied.
