@@ -1,5 +1,6 @@
 import express, { Express, Router, Request, Response, NextFunction } from "express";
 import eventStream from "./EventStream.js";
+import { healthCheck } from "./ExpressCommonRoutes.js";
 
 export default class ExpressServer {
     #app: Express;
@@ -28,6 +29,13 @@ export default class ExpressServer {
 
     fallbackRouter(fallbackFunction: (req: Request, res: Response) => void) {
         this.#app.use(fallbackFunction);
+    }
+
+    healthCheckRouter(
+        endpoint: string = "/health",
+        healthCheckFunction: (req: Request, res: Response) => void = healthCheck
+    ) {
+        this.#app.get(endpoint, healthCheckFunction);
     }
 
     start(port: number) {

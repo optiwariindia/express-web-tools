@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import eventStream from "./EventStream.js";
 
+export function healthCheck(_req: Request, res: Response) {
+    return res.status(200).json({
+        status: "success",
+        message: "Server is healthy"
+    });
+}
+
 export async function fallbackRoute(req: Request, res: Response) {
     eventStream.emitEvent("fallback", {
         headers: req.headers,
@@ -28,4 +35,15 @@ export function errorRoute(
             status: "error",
             message
         });
+}
+
+export function setOrigin(origin: null | string = null) {
+    return function (
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) {
+        (req as Request & { origin?: string }).origin = (!origin) ? req.host : origin;
+        next();
+    }
 }

@@ -142,12 +142,31 @@ const payload = Token.verify(token);
 A wrapper to simplify Express app setup, including middleware, routing, and view engines.
 ```typescript
 import { ExpressServer } from 'express-web-tools';
+import express from 'express';
 
 const server = new ExpressServer();
 server.views('twig', './views');
 server.addMiddleware(express.json());
+server.healthCheckRouter();
 server.addRoute('/api/v1', apiRouter);
 server.start(3000);
+```
+
+`healthCheckRouter()` registers `GET /health` and responds with HTTP 200:
+
+```json
+{
+    "status": "success",
+    "message": "Server is healthy"
+}
+```
+
+A custom endpoint or handler can be supplied:
+
+```typescript
+import { healthCheck } from 'express-web-tools';
+
+server.healthCheckRouter('/status', healthCheck);
 ```
 
 ### `API`
